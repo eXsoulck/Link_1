@@ -28,6 +28,8 @@ class Link(db.Model):
     short_link = db.Column(db.String(), nullable=True)
     user_id = db.Column(db.Integer(), db.ForeignKey("new_user.id"))
 
+with app.app_context():
+    db.create_all()
 
 # back half link generator
 def link_generator():
