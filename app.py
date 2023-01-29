@@ -13,7 +13,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///new-user.db"
 app.config["SECRET_KEY"] = "hellojeka"
 db = SQLAlchemy(app)
 
-
+# create models for user and links
 class NewUser(db.Model):
     id = db.Column(db.Integer(), primary_key=True)
     user_email = db.Column(db.String(), nullable=False, unique=True)
@@ -28,6 +28,8 @@ class Link(db.Model):
     short_link = db.Column(db.String(), nullable=True)
     user_id = db.Column(db.Integer(), db.ForeignKey("new_user.id"))
 
+# creating tables in db
+
 with app.app_context():
     db.create_all()
 
@@ -37,13 +39,12 @@ def link_generator():
     print(back_half_link)
     return back_half_link
 
-
+# main page
 @app.route("/")
-def hello_world():  # put application's code here
-
+def hello_world():
     return render_template("index.html")
 
-
+# define simple user login function
 @app.route("/login", methods=["POST"])
 def login():
     user_email = request.form["u_email"]
@@ -54,21 +55,24 @@ def login():
             session["user"] = user_email
             return redirect(url_for("dashboard"))
         else:
-            flash("Incorrect password, try again .", "login_error")
+            flash("Incorrect password , try again .", "login_error")
             return render_template("index.html")
     else:
         flash("Wrong email", "login_error")
         return redirect(url_for("hello_world"))
 
-
+# define  user registration function
 @app.route("/register", methods=["POST"])
 def register():
-    error = None
+    # get user information from form
+
     user_email = request.form["u_email"]
     user_pass = request.form["u_pass"]
     user_pass2 = request.form["u_pass2"]
+    # check if user is exists in database
     get_user = NewUser.query.filter_by(user_email=user_email).first()
-    if get_user == None:
+    if not get_user:
+        # checking passwords and generate hash
         if user_pass == user_pass2:
             hash_pass = generate_password_hash(user_pass)
             new_user = NewUser(user_email=user_email, user_pass=hash_pass)
@@ -80,15 +84,13 @@ def register():
             return redirect(url_for("hello_world"))
     elif user_email in get_user.user_email:
         flash(f"The email {get_user.user_email} is already in use, try another one !", "regisret_error")
-        print(user_email, get_user.user_email)
-        return redirect(url_for("hello_world", error=error))
+        return redirect(url_for("hello_world"))
 
-
+# dashboard where user can add and edit his links
 @app.route("/dashboard", methods=["GET", "POST"])
 def dashboard():
     if request.method == "GET":
         if "user" in session:
-            print(session["user"])
             current_user = session["user"]
             get_user = NewUser.query.filter_by(user_email=current_user).first()
             return render_template("dashboard.html", get_user=get_user)
@@ -97,11 +99,12 @@ def dashboard():
             return redirect(url_for("hello_world"))
     if request.method == "POST":
         user_link = request.form["u_link"]
+        # checking if current link exists in database
         compare = Link.query.filter_by(user_link=user_link).first()
         if compare is None:
+            # if user left custom part of the link empty it will be generated
             if (request.form["custom_part"] == "") or (request.form["custom_part"] is None):
                 short_link = link_generator()
-                print(short_link)
             else:
                 short_link = request.form["custom_part"]
             # create QRcode
@@ -110,25 +113,27 @@ def dashboard():
             qr.add_data(request.form["u_link"])  # Adding the data to be encoded to the QRCode object
             qr.make(fit=True)  # Making the entire QR Code space utilized
             img = qr.make_image()  # Generating the QR Code
-            # Getting the directory where the file has
-            # to be sav
-            # img.save(f"static/images/{short_link}.png")
             current_user = session["user"]
             get_user = NewUser.query.filter_by(user_email=current_user).first()
             add_link = Link(user_link=user_link, link_title=link_title, short_link=short_link, user_id=get_user.id)
             db.session.add(add_link)
             db.session.commit()
+
+            # Getting the directory where the file has to be save
             images_location = Path.cwd() / "static"
             images_location /= "qr_codes"
+            # Creating folder if not exists
             if not images_location.exists():
                 images_location.mkdir()
             link_id = Link.query.filter_by(user_link=user_link).first()
+            # save img with the same id as link has
             img.save(f"{images_location}/{link_id.id}.png")
             return redirect(url_for("dashboard", get_user=get_user))
         elif user_link == compare.user_link:
             flash("This link is already in data base ", category="link_error")
             return redirect(url_for("dashboard"))
 
+# Function for editing links
 @app.route("/update", methods=["POST"])
 def update():
     if request.method == "POST":
@@ -143,7 +148,7 @@ def update():
             db.session.commit()
         return redirect(url_for("dashboard"))
 
-
+# Deleting link from database
 @app.route("/delete/<ids>", methods=["POST", "GET"])
 def delete(ids):
     my_data = Link.query.get(ids)
@@ -157,7 +162,7 @@ def logout():
     session.clear()
     return redirect(url_for("hello_world"))
 
-
+# Function for redirecting to target location
 @app.route("/<short>")
 def redir(short):
     find_link = Link.query.filter_by(short_link=short)
@@ -167,7 +172,7 @@ def redir(short):
     print(finalurl)
     return redirect(finalurl, code=302)
 
-
+# Search functionality
 @app.route("/user_search", methods=["POST", "GET"])
 def user_search():
     if request.method == "POST":
@@ -179,10 +184,9 @@ def user_search():
     elif request.method == "GET":
         current_user = session["user"]
         get_user = NewUser.query.filter_by(user_email=current_user).first()
-
         return redirect(url_for("dashboard", get_user=get_user))
 
-
+# Deleting all flashing massages warnings after closing any modals
 @app.route("/clear_flash_msg", methods=["POST"])
 def clear_flash_msg():
     user_url = request.form["current_url"]
